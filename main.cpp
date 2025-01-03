@@ -1,5 +1,6 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/mutex.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -21,10 +22,9 @@
 #include "textDisplayUS2066.h"
 #include "color.h"
 
-auto_init_mutex(mutex);
-
 static deviceLegacy* device = NULL;
 static bool refresh = false;
+static mutex_t mutex;
 
 void render_loop() 
 {
@@ -34,9 +34,9 @@ void render_loop()
 	const uint16_t yShift = 0;
 	const uint16_t bitsPerPixel = 1;
 
-	spi_inst_t* spi = spi0;
+	spi_inst_t* spi = spi1;
 	const uint32_t baudRate = 100 * 1000;
-	const uint8_t rxPin = 13;
+	const uint8_t txPin = 11;
 	const uint8_t sckPin = 10;
 	const uint8_t csnPin = 9;
 	const uint8_t rstPin = 12;
@@ -44,19 +44,18 @@ void render_loop()
 	const uint8_t backlightPin = 20;
 
 	pixelDisplaySSD1309* display = new pixelDisplaySSD1309(width, height, xShift, yShift, bitsPerPixel);
-	display->initSpi(spi, baudRate, rxPin, sckPin, csnPin, rstPin, dcPin, backlightPin);
+	display->initSpi(spi, baudRate, txPin, sckPin, csnPin, rstPin, dcPin, backlightPin);
 	display->fill(0x000000);
 	display->drawDisplay();
 
     while (true)
 	{
-		mutex_enter_blocking(&mutex);
-		bool needRefresh = refresh;
-		refresh = false;
-		mutex_exit(&mutex);
-
-		if (needRefresh == true)
+		if (refresh == true)
 		{
+			//mutex_enter_blocking(&mutex);
+			refresh = false;
+			//mutex_exit(&mutex);
+
 			display->fill(0x000000);
 			for (int y = 0; y < device->getRows(); y++)
 			{
@@ -75,6 +74,8 @@ int main()
 {
     stdio_init_all();
 
+	mutex_init(&mutex);
+
 	spi_inst_t* spi = spi0;
 	const uint32_t baudRate = 100 * 1000;
 	const uint8_t rxPin = 0;
@@ -90,9 +91,9 @@ int main()
 		bool needRefresh = device->poll();
 		if (needRefresh == true)
 		{
-			mutex_enter_blocking(&mutex);
+			//mutex_enter_blocking(&mutex);
 			refresh = true;
-			mutex_exit(&mutex);
+			//mutex_exit(&mutex);
 		}
 		sleep_ms(1);
 	}
